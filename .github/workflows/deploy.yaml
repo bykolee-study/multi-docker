@@ -27,58 +27,59 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: bykolee1/multi-client:latest
           platforms: linux/amd64
           file: ./client/Dockerfile
           context: ./client
-
-      - name: Build and push nginx Docker images
-        uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: bykolee1/multi-nginx:latest
-          platforms: linux/amd64
-          file: ./nginx/Dockerfile
-          context: ./nginx
+          tags: |
+            bykolee1/multi-client:latest
+            bykolee1/multi-client:${{ github.sha }}
 
       - name: Build and push server Docker images
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: bykolee1/multi-server:latest
           platforms: linux/amd64
           file: ./server/Dockerfile
           context: ./server
+          tags: |
+            bykolee1/multi-server:latest
+            bykolee1/multi-server:${{ github.sha }}
 
       - name: Build and push worker Docker images
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: bykolee1/multi-worker:latest
           platforms: linux/amd64
           file: ./worker/Dockerfile
           context: ./worker
+          tags: |
+            bykolee1/multi-worker:latest
+            bykolee1/multi-worker:${{ github.sha }}
 
-      # - run: docker build -t rallycoding/multi-client ./client
-      # - run: docker build -t rallycoding/multi-nginx ./nginx
-      # - run: docker build -t rallycoding/multi-server ./server
-      # - run: docker build -t rallycoding/multi-worker ./worker
+      # GKE 인증 설정 (Google 공식 방식)
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+          project_id: udemy-multi-k8s-474405
+      
+      # GKE 클러스터 인증 및 kubectl 자동 설정
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: multi-cluster
+          location: asia-northeast2
 
-      # - run: docker push rallycoding/multi-client
-      # - run: docker push rallycoding/multi-nginx
-      # - run: docker push rallycoding/multi-server
-      # - run: docker push rallycoding/multi-worker
+      # k8s 디렉토리의 모든 설정 파일 적용
+      - name: Apply Kubernetes configurations
+        run: |
+          kubectl apply -f k8s
 
-      # - name: Generate deployment package
-      #   run: zip -r deploy.zip . -x '*.git*'
+      # Deployment 이미지 업데이트
+      - name: Update deployment images
+        run: |
+          kubectl set image deployment/client-deployment client=bykolee1/multi-client:${{ github.sha }}
+          kubectl set image deployment/server-deployment server=bykolee1/multi-server:${{ github.sha }}
+          kubectl set image deployment/worker-deployment worker=bykolee1/multi-worker:${{ github.sha }}
 
-      # - name: Deploy to EB
-      #   uses: einaregilsson/beanstalk-deploy@v22
-      #   with:
-      #     aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      #     application_name: multi-docker
-      #     environment_name: Multi-docker-env
-      #     version_label: ${{ github.SHA }}
-      #     region: ap-southeast-2
-      #     deployment_package: deploy.zip
+      
